@@ -70,11 +70,11 @@ The Notification Service consumes the platform's Kafka topics and owns its own P
                     └───────┬───────┬─────┘
                             │       │
                             ▼       ▼
-                    ┌──────────┐ ┌──────────────────┐
-                    │PostgreSQL│ │  Web Push        │
-                    │notif_db  │ │  (browser / FCM) │
-                    │  :5434   │ │                  │
-                    └──────────┘ └──────────────────┘
+                    ┌──────────┐ ┌────────────┐
+                    │PostgreSQL│ │  Web Push  │
+                    │notif_db  │ │  (browser) │
+                    │  :5434   │ │            │
+                    └──────────┘ └────────────┘
 ```
 
 The service owns its own database and does not share entities with other services.
@@ -233,39 +233,6 @@ The test suite is database-free: services, consumers, and the push relay are exe
 
 ---
 
-## Environment Variables
-
-Full template: `.env.example`.
-
-| Variable | Default | Notes |
-| -------- | ------- | ----- |
-| `NOTIFICATION_SERVICE_PORT` | `8085` | Service port |
-| `DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD` | localhost/5434/notification_db/notification_service | PostgreSQL |
-| `JWT_JWK_SET_URI` | `http://localhost:8081/oauth2/jwks` | JWKS verification (no endpoint ships yet — INC-02) |
-| `JWT_HMAC_SECRET` | empty | HS256 mode for local/dev; when set it takes precedence — **shared** with Auth |
-| `KAFKA_BOOTSTRAP_SERVERS / KAFKA_ENABLED` | localhost:9092 / true | event backbone; consumers only |
-| `PUSH_ENABLED` | `true` | master switch for the push relay |
-| `PUSH_RELAY_INTERVAL / PUSH_RELAY_BATCH` | 5s / 100 | push outbox relay |
-| `PUSH_MAX_ATTEMPTS` | `5` | attempts before a delivery is abandoned |
-| `PUSH_TTL_SECONDS` | `2419200` | Web Push `TTL` header |
-| `VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT` | — | Web Push VAPID credentials |
-
----
-
-## Events
-
-Consumed from `badrlink.chat.room.v1`, `badrlink.chat.message.v1`, `badrlink.chat.invitation.v1`, and `badrlink.user.profile.v1` as the consumer group `notification-service`:
-
-| Topic | Events | Effect |
-| ----- | ------ | ------ |
-| `badrlink.chat.room.v1` | `PARTICIPANT_ADDED`, `PARTICIPANT_REMOVED`, `PARTICIPANT_MUTED`, `PARTICIPANT_UNMUTED` | maintain the room membership read model |
-| `badrlink.chat.message.v1` | `MESSAGE_SENT`, `REACTION_ADDED` | fan out `MESSAGE` notifications; notify a message's sender on a reaction |
-| `badrlink.chat.invitation.v1` | `INVITATION_SENT`, `INVITATION_ACCEPTED` | notify the invited user, then the original inviter |
-| `badrlink.user.profile.v1` | `USER_CONNECTION_ACCEPTED` | notify both users |
-
-`MESSAGE_DELETED`, `INVITATION_REJECTED`, `USER_BLOCKED`, `USER_UNBLOCKED`, and profile/role events are **deliberately ignored**: tombstones are the Search service's concern, a declined invitation is not disclosed to the inviter, and a blocked party is never notified. Catalog: [`/docs/EVENTS.md`](../docs/EVENTS.md); decision record: [`/docs/adr/0009`](../docs/adr/0009-notification-service.md).
-
----
 
 ## Web Push
 
