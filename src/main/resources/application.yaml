@@ -1,3 +1,52 @@
 spring:
   application:
     name: messaging-notification-service
+  config:
+    import: "optional:file:.env[.properties]"
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5434}/${DB_NAME:notification_db}
+    username: ${DB_USER:notification_service}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+server:
+  port: ${NOTIFICATION_SERVICE_PORT:8085}
+  shutdown: graceful
+
+badrlink:
+  kafka:
+    enabled: ${KAFKA_ENABLED:true}
+  notification:
+    default-page-size: 30
+    max-page-size: 100
+    sender-cache-retention: 90d
+    cleanup-interval: PT24H
+    push:
+      enabled: ${PUSH_ENABLED:true}
+      relay-interval: ${PUSH_RELAY_INTERVAL:5s}
+      batch-size: ${PUSH_RELAY_BATCH:100}
+      max-attempts: ${PUSH_MAX_ATTEMPTS:5}
+      ttl-seconds: ${PUSH_TTL_SECONDS:2419200}
+      vapid-public-key: ${VAPID_PUBLIC_KEY:}
+      vapid-private-key: ${VAPID_PRIVATE_KEY:}
+      vapid-subject: ${VAPID_SUBJECT:mailto:admin@badrlink.local}
+  security:
+    jwt:
+      jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8081/oauth2/jwks}
+      hmac-secret: ${JWT_HMAC_SECRET:}
+
+logging:
+  level:
+    com.ziyadsamhaoui.messagingnotificationservice: INFO
