@@ -241,8 +241,8 @@ Full template: `.env.example`.
 | -------- | ------- | ----- |
 | `NOTIFICATION_SERVICE_PORT` | `8085` | Service port |
 | `DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD` | localhost/5434/notification_db/notification_service | PostgreSQL |
-| `JWT_JWK_SET_URI` | `http://localhost:8081/oauth2/jwks` | JWKS verification (no endpoint ships yet — INC-02) |
-| `JWT_HMAC_SECRET` | empty | HS256 mode for local/dev; when set it takes precedence — **shared** with Auth |
+| `JWT_JWK_SET_URI` | `http://messaging-auth-service:8081/oauth2/jwks` | Primary RS256 verification against Auth's JWKS |
+| `JWT_HMAC_SECRET` | empty | HS256 fallback, used **only** under the `dev`/`test` profiles when `JWT_JWK_SET_URI` is empty |
 | `KAFKA_BOOTSTRAP_SERVERS / KAFKA_ENABLED` | localhost:9092 / true | event backbone; consumers only |
 | `PUSH_ENABLED` | `true` | master switch for the push relay |
 | `PUSH_RELAY_INTERVAL / PUSH_RELAY_BATCH` | 5s / 100 | push outbox relay |
