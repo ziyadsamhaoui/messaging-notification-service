@@ -3,6 +3,7 @@ package com.ziyadsamhaoui.messagingnotificationservice.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -24,6 +25,12 @@ public class SecurityConfig {
     @Value("${badrlink.security.jwt.hmac-secret:}")
     private String hmacSecret;
 
+    private final Environment environment;
+
+    public SecurityConfig(Environment environment) {
+        this.environment = environment;
+    }
+
     @Bean
     SecurityFilterChain notificationServiceSecurityFilterChain(HttpSecurity http) throws Exception {
         http.csrf(csrf -> csrf.disable())
@@ -35,13 +42,22 @@ public class SecurityConfig {
 
     @Bean
     JwtDecoder jwtDecoder() {
-        if (hmacSecret != null && !hmacSecret.isBlank()) {
-            SecretKey key = new SecretKeySpec(hmacSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
-            return NimbusJwtDecoder.withSecretKey(key).build();
-        }
         if (jwkSetUri != null && !jwkSetUri.isBlank()) {
             return NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
         }
+        if (hmacSecret != null && !hmacSecret.isBlank() && hmacFallbackAllowed()) {
+            SecretKey key = new SecretKeySpec(hmacSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+            return NimbusJwtDecoder.withSecretKey(key).build();
+        }
         throw new IllegalStateException("no JWT verification method configured");
+    }
+
+    private boolean hmacFallbackAllowed() {
+        for (String profile : environment.getActiveProfiles()) {
+            if ("dev".equals(profile) || "test".equals(profile)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

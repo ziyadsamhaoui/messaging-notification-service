@@ -41,10 +41,10 @@ badrlink:
       ttl-seconds: ${PUSH_TTL_SECONDS:2419200}
       vapid-public-key: ${VAPID_PUBLIC_KEY:}
       vapid-private-key: ${VAPID_PRIVATE_KEY:}
-      vapid-subject: ${VAPID_SUBJECT:mailto:admin@badrlink.local}
+      vapid-subject: ${VAPID_SUBJECT:}
   security:
     jwt:
-      jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8081/oauth2/jwks}
+      jwk-set-uri: ${JWT_JWK_SET_URI:http://messaging-auth-service:8081/oauth2/jwks}
       hmac-secret: ${JWT_HMAC_SECRET:}
 
 logging:
