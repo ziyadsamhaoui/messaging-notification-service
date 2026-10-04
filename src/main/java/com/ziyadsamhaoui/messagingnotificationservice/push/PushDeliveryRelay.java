@@ -5,15 +5,16 @@ import com.ziyadsamhaoui.messagingnotificationservice.model.Notification;
 import com.ziyadsamhaoui.messagingnotificationservice.model.NotificationPreference;
 import com.ziyadsamhaoui.messagingnotificationservice.model.PendingPushDelivery;
 import com.ziyadsamhaoui.messagingnotificationservice.model.PushSubscription;
+import com.ziyadsamhaoui.messagingnotificationservice.model.enums.PushDeliveryStatus;
 import com.ziyadsamhaoui.messagingnotificationservice.repository.NotificationPreferenceRepository;
 import com.ziyadsamhaoui.messagingnotificationservice.repository.NotificationRepository;
 import com.ziyadsamhaoui.messagingnotificationservice.repository.PendingPushDeliveryRepository;
 import com.ziyadsamhaoui.messagingnotificationservice.repository.PushSubscriptionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
@@ -26,6 +27,8 @@ import java.util.Map;
 @Slf4j
 public class PushDeliveryRelay {
 
+    static final int MAX_ERROR_LENGTH = 1000;
+
     private final PendingPushDeliveryRepository pendingPushDeliveryRepository;
     private final NotificationRepository notificationRepository;
     private final NotificationPreferenceRepository preferenceRepository;
@@ -33,6 +36,7 @@ public class PushDeliveryRelay {
     private final WebPushSender webPushSender;
     private final NotificationProperties properties;
     private final ObjectMapper objectMapper;
+    private final TransactionTemplate transactionTemplate;
 
     @Scheduled(fixedDelayString = "${badrlink.notification.push.relay-interval:5s}")
     public void dispatchPending() {
@@ -41,36 +45,45 @@ public class PushDeliveryRelay {
             return;
         }
 
-        List<PendingPushDelivery> batch = pendingPushDeliveryRepository
-                .findByDeliveredAtIsNullOrderByCreatedAtAsc(PageRequest.of(0, push.batchSize()));
+        List<PendingPushDelivery> batch = transactionTemplate.execute(status ->
+                pendingPushDeliveryRepository.lockPendingBatch(push.batchSize()));
+        if (batch == null) {
+            return;
+        }
 
         for (PendingPushDelivery delivery : batch) {
-            try {
-                dispatch(delivery, push);
-            } catch (RuntimeException exception) {
-                log.error("push delivery {} failed", delivery.getId(), exception);
-            }
+            processOne(delivery, push);
         }
     }
 
-    void dispatch(PendingPushDelivery delivery, NotificationProperties.Push push) {
+    private void processOne(PendingPushDelivery delivery, NotificationProperties.Push push) {
+        try {
+            if (attempt(delivery)) {
+                transactionTemplate.executeWithoutResult(status ->
+                        pendingPushDeliveryRepository.markProcessed(delivery.getId()));
+            } else {
+                recordFailure(delivery, push, "push delivery attempt failed");
+            }
+        } catch (RuntimeException exception) {
+            recordFailure(delivery, push, exception.getMessage());
+        }
+    }
+
+    boolean attempt(PendingPushDelivery delivery) {
         Notification notification = notificationRepository.findById(delivery.getNotificationId()).orElse(null);
         if (notification == null) {
-            markDelivered(delivery);
-            return;
+            return true;
         }
 
         NotificationPreference preference = preferenceRepository.findById(notification.getUserId()).orElse(null);
         if (preference != null && (!preference.isPushEnabled()
                 || preference.mutedTypeSet().contains(notification.getType()))) {
-            markDelivered(delivery);
-            return;
+            return true;
         }
 
         List<PushSubscription> subscriptions = subscriptionRepository.findByUserId(notification.getUserId());
         if (subscriptions.isEmpty()) {
-            markDelivered(delivery);
-            return;
+            return true;
         }
 
         String payload = buildPayload(notification);
@@ -91,12 +104,28 @@ public class PushDeliveryRelay {
             }
         }
 
-        delivery.setAttempts(delivery.getAttempts() + 1);
-        if (delivered || delivery.getAttempts() >= push.maxAttempts()) {
-            markDelivered(delivery);
-        } else {
-            pendingPushDeliveryRepository.save(delivery);
+        return delivered;
+    }
+
+    private void recordFailure(PendingPushDelivery delivery, NotificationProperties.Push push, String message) {
+        int attempts = delivery.getAttempts() + 1;
+        PushDeliveryStatus status = attempts >= push.maxAttempts()
+                ? PushDeliveryStatus.FAILED_DEAD_LETTER
+                : PushDeliveryStatus.PENDING;
+        Instant nextRetryAt = Instant.now().plusSeconds(1L << attempts);
+        String error = truncate(message);
+        transactionTemplate.executeWithoutResult(ignored ->
+                pendingPushDeliveryRepository.recordFailure(
+                        delivery.getId(), attempts, error, status.name(), nextRetryAt));
+        log.warn("push delivery {} failed on attempt {} with status {}: {}",
+                delivery.getId(), attempts, status, error);
+    }
+
+    private static String truncate(String message) {
+        if (message == null) {
+            return null;
         }
+        return message.length() <= MAX_ERROR_LENGTH ? message : message.substring(0, MAX_ERROR_LENGTH);
     }
 
     private String buildPayload(Notification notification) {
@@ -118,10 +147,5 @@ public class PushDeliveryRelay {
             case INVITATION -> "Invitation";
             case SYSTEM -> "BadrLink";
         };
-    }
-
-    private void markDelivered(PendingPushDelivery delivery) {
-        delivery.setDeliveredAt(Instant.now());
-        pendingPushDeliveryRepository.save(delivery);
     }
 }

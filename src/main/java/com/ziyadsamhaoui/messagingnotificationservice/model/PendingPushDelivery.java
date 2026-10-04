@@ -1,7 +1,10 @@
 package com.ziyadsamhaoui.messagingnotificationservice.model;
 
+import com.ziyadsamhaoui.messagingnotificationservice.model.enums.PushDeliveryStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
@@ -37,12 +40,30 @@ public class PendingPushDelivery {
     private Instant deliveredAt;
 
     @Column(nullable = false)
-    private int attempts;
+    @Builder.Default
+    private int attempts = 0;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 32)
+    @Builder.Default
+    private PushDeliveryStatus status = PushDeliveryStatus.PENDING;
+
+    @Column(name = "last_error")
+    private String lastError;
+
+    @Column(name = "next_retry_at", nullable = false)
+    private Instant nextRetryAt;
 
     @PrePersist
     void onPrePersist() {
         if (createdAt == null) {
             createdAt = Instant.now();
+        }
+        if (status == null) {
+            status = PushDeliveryStatus.PENDING;
+        }
+        if (nextRetryAt == null) {
+            nextRetryAt = Instant.now();
         }
     }
 }
