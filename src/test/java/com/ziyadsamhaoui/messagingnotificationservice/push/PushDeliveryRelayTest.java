@@ -21,6 +21,7 @@ import com.ziyadsamhaoui.messagingnotificationservice.repository.NotificationPre
 import com.ziyadsamhaoui.messagingnotificationservice.repository.NotificationRepository;
 import com.ziyadsamhaoui.messagingnotificationservice.repository.PendingPushDeliveryRepository;
 import com.ziyadsamhaoui.messagingnotificationservice.repository.PushSubscriptionRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -62,7 +63,7 @@ class PushDeliveryRelayTest {
                 Duration.ofHours(24), push);
         relay = new PushDeliveryRelay(pendingPushDeliveryRepository, notificationRepository, preferenceRepository,
                 subscriptionRepository, webPushSender, properties, new ObjectMapper(),
-                new TransactionTemplate(transactionManager));
+                new TransactionTemplate(transactionManager), new SimpleMeterRegistry());
     }
 
     @Test

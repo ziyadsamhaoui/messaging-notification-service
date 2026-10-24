@@ -10,6 +10,8 @@ import com.ziyadsamhaoui.messagingnotificationservice.repository.NotificationPre
 import com.ziyadsamhaoui.messagingnotificationservice.repository.NotificationRepository;
 import com.ziyadsamhaoui.messagingnotificationservice.repository.PendingPushDeliveryRepository;
 import com.ziyadsamhaoui.messagingnotificationservice.repository.PushSubscriptionRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -29,6 +31,8 @@ public class PushDeliveryRelay {
 
     static final int MAX_ERROR_LENGTH = 1000;
 
+    static final String DELIVERY_METRIC = "badrlink.notification.push.deliveries";
+
     private final PendingPushDeliveryRepository pendingPushDeliveryRepository;
     private final NotificationRepository notificationRepository;
     private final NotificationPreferenceRepository preferenceRepository;
@@ -37,6 +41,7 @@ public class PushDeliveryRelay {
     private final NotificationProperties properties;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
+    private final MeterRegistry meterRegistry;
 
     @Scheduled(fixedDelayString = "${badrlink.notification.push.relay-interval:5s}")
     public void dispatchPending() {
@@ -91,6 +96,7 @@ public class PushDeliveryRelay {
 
         for (PushSubscription subscription : subscriptions) {
             WebPushResult result = webPushSender.send(subscription, payload);
+            recordDelivery(result);
 
             if (result.gone()) {
                 log.info("removing dead push subscription {} (HTTP 410)", subscription.getId());
@@ -105,6 +111,28 @@ public class PushDeliveryRelay {
         }
 
         return delivered;
+    }
+
+    /**
+     * Counts one outcome per attempted subscription, using the Web Push response as the source
+     * of truth: {@code success} for a 2xx, {@code gone} for HTTP 410 (the subscription was
+     * deleted and the series reveals accumulating stale endpoints) and {@code failure} for
+     * transport errors or any other status, which the retry schedule then handles.
+     */
+    private void recordDelivery(WebPushResult result) {
+        String outcome;
+        if (result.gone()) {
+            outcome = "gone";
+        } else if (result.success()) {
+            outcome = "success";
+        } else {
+            outcome = "failure";
+        }
+        Counter.builder(DELIVERY_METRIC)
+                .description("Web Push delivery attempts per subscription, by outcome")
+                .tag("result", outcome)
+                .register(meterRegistry)
+                .increment();
     }
 
     private void recordFailure(PendingPushDelivery delivery, NotificationProperties.Push push, String message) {
