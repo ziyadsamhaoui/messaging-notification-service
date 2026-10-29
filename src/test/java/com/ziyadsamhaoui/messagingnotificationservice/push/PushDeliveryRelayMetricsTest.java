@@ -30,11 +30,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * Verifies that one Web Push attempt is counted exactly once, under the outcome that the push
- * service reported: 2xx is success, HTTP 410 is the gone series that reveals stale
- * subscriptions, and everything else is a failure.
- */
 class PushDeliveryRelayMetricsTest {
 
     private static final String METRIC = PushDeliveryRelay.DELIVERY_METRIC;
@@ -135,10 +130,6 @@ class PushDeliveryRelayMetricsTest {
         assertThat(count("failure")).isEqualTo(2.0);
     }
 
-    /**
-     * A Micrometer counter series only exists once it has been incremented, so an outcome that
-     * has not happened yet is legitimately absent rather than zero-valued.
-     */
     private double count(String result) {
         var counter = registry.find(METRIC).tag("result", result).counter();
         return counter == null ? 0.0 : counter.count();

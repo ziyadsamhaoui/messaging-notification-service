@@ -113,12 +113,6 @@ public class PushDeliveryRelay {
         return delivered;
     }
 
-    /**
-     * Counts one outcome per attempted subscription, using the Web Push response as the source
-     * of truth: {@code success} for a 2xx, {@code gone} for HTTP 410 (the subscription was
-     * deleted and the series reveals accumulating stale endpoints) and {@code failure} for
-     * transport errors or any other status, which the retry schedule then handles.
-     */
     private void recordDelivery(WebPushResult result) {
         String outcome;
         if (result.gone()) {

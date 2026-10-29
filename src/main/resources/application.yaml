@@ -25,8 +25,6 @@ server:
   port: ${NOTIFICATION_SERVICE_PORT:8085}
   shutdown: graceful
 
-# Actuator is served on its own port: Prometheus scrapes it over the Docker network,
-# while the application port keeps the existing security configuration untouched.
 management:
   server:
     port: ${MANAGEMENT_PORT:9090}
@@ -39,8 +37,6 @@ management:
       probes:
         enabled: true
       show-details: never
-      # Readiness covers PostgreSQL; liveness stays on readinessState so a database outage
-      # does not restart a pod that is otherwise able to recover.
       group:
         readiness:
           include: readinessState,db
@@ -74,9 +70,6 @@ badrlink:
       refresh-interval: ${KAFKA_LAG_METRICS_INTERVAL:15s}
       group-id: notification-service
 
-# Structured JSON logs. The OpenTelemetry agent puts trace_id/span_id into the MDC, and
-# Boot's logstash format writes the MDC into the JSON object, so no custom encoder is
-# needed and the trace context also survives Kafka consumer threads.
 logging:
   level:
     com.ziyadsamhaoui.messagingnotificationservice: INFO
